@@ -1,11 +1,9 @@
 use std::fs::File;
-use std::thread::sleep;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use evdev_rs::enums::{BusType, EventCode, EventType, EV_KEY, EV_SYN};
-use evdev_rs::{
-    Device, DeviceWrapper, InputEvent, ReadFlag, ReadStatus, TimeVal, UInputDevice, UninitDevice,
-};
+use evdev_rs::Device;
+use evdev_rs::{DeviceWrapper, InputEvent, ReadFlag, TimeVal, UInputDevice, UninitDevice};
 
 // Global virtual keyboard
 pub struct VirtualKeyboard {
@@ -62,8 +60,10 @@ impl VirtualKeyboard {
         }
     }
 
-    pub fn write_event(self, event: InputEvent) {
+    pub fn write_event(&self, event_buf: [u8; 4096]) {
         println!("send event");
+        // deserialize event
+        let event: InputEvent = serde_json::from_slice(&event_buf).unwrap();
 
         let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         self.input_device
