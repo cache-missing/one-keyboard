@@ -1,3 +1,3 @@
 mod linux;
 
-pub use linux::virtual_keyboard;
+pub use linux::VirtualKeyboard;
