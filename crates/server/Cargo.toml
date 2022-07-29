@@ -6,6 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+flexi_logger = "0.22.5"
+log = "0.4.17"
 tokio = { version = "1.20.1", features = ["net", "macros", "rt-multi-thread"] }
 
 virtual_keyboard = {path = "../virtual_keyboard"}
