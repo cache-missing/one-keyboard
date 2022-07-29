@@ -18,8 +18,14 @@ impl VirtualKeyboard {
         let device = "/dev/input/event2";
 
         // Connect to real keyboard, or fallback to default virtual keyboard(TODO)
-        let f = File::open(device).unwrap();
-        let d = Device::new_from_file(f).unwrap();
+        let f = match File::open(device) {
+            Ok(f) => f,
+            Err(e) => panic!("Failed to open file {}, error: {}", device, e),
+        };
+        let d = match Device::new_from_file(f) {
+            Ok(d) => d,
+            Err(e) => panic!("Failed to open device {}, error: {}", device, e),
+        };
 
         if let Some(n) = d.name() {
             println!(
@@ -31,7 +37,10 @@ impl VirtualKeyboard {
         }
 
         // Create virtual device
-        let u = UninitDevice::new().unwrap();
+        let u = match UninitDevice::new() {
+            Some(u) => u,
+            None => panic!("Failed to create virtual device"),
+        };
 
         // Setup device
         u.set_name("Virtual Keyboard");
@@ -39,21 +48,30 @@ impl VirtualKeyboard {
         u.set_vendor_id(0xabcd);
         u.set_product_id(0xefef);
 
-        // Note mouse keys have to be enabled for this to be detected
-        // as a usable device, see: https://stackoverflow.com/a/64559658/6074942
-        u.enable_event_type(&EventType::EV_KEY).unwrap();
-        u.enable_event_code(&EventCode::EV_KEY(EV_KEY::KEY_K), None)
-            .unwrap();
-
-        u.enable_event_code(&EventCode::EV_SYN(EV_SYN::SYN_REPORT), None)
-            .unwrap();
+        if let Err(e) = u.enable(EventType::EV_KEY) {
+            panic!("Failed to enable EV_KEY, error: {}", e)
+        };
+        if let Err(e) = u.enable(EventCode::EV_KEY(EV_KEY::KEY_K)) {
+            println!("Failed to enable EV_KEY(KEY_K), error: {}", e)
+        };
+        if let Err(e) = u.enable(EventCode::EV_SYN(EV_SYN::SYN_REPORT)) {
+            panic!("Failed to enable EV_SYN(SYN_REPORT), error: {}", e)
+        };
 
         // Attempt to create UInputDevice from UninitDevice
-        let v = UInputDevice::create_from_device(&d).unwrap();
-        println!("Virtual Keyboard: {}", v.syspath().unwrap());
+        let v = match UInputDevice::create_from_device(&d) {
+            Ok(v) => v,
+            Err(e) => panic!("Failed to create virtual device, error: {}", e),
+        };
+        if let Some(syspath) = v.syspath() {
+            println!("Created virtual device: {}", syspath);
+        }
 
         // devnode
-        println!("devnode: {}", v.devnode().unwrap());
+        if let Some(devnode) = v.devnode() {
+            println!("devnode: {}", devnode);
+        }
+
         VirtualKeyboard {
             device: d,
             input_device: v,
@@ -63,36 +81,49 @@ impl VirtualKeyboard {
     pub fn write_event(&self, event_buf: [u8; 4096]) {
         println!("send event");
         // deserialize event
-        let event: InputEvent = serde_json::from_slice(&event_buf).unwrap();
+        let event: InputEvent = match serde_json::from_slice(&event_buf) {
+            Ok(event) => event,
+            Err(e) => {
+                println!("Failed to deserialize event, error: {}", e);
+                return;
+            }
+        };
 
-        let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        self.input_device
-            .write_event(&InputEvent {
+        if let Ok(current_time) = SystemTime::now().duration_since(UNIX_EPOCH) {
+            if let Err(e) = self.input_device.write_event(&InputEvent {
                 time: TimeVal {
                     tv_sec: current_time.as_secs() as i64,
                     tv_usec: 0,
                 },
                 event_code: event.event_code,
                 value: event.value,
-            })
-            .unwrap();
+            }) {
+                return println!("Failed to write event, event: {:?}, error: {}", event, e);
+            }
 
-        self.input_device
-            .write_event(&InputEvent {
+            if let Err(e) = self.input_device.write_event(&InputEvent {
                 time: TimeVal {
                     tv_sec: current_time.as_secs() as i64,
                     tv_usec: 1,
                 },
                 event_code: EventCode::EV_SYN(EV_SYN::SYN_REPORT),
                 value: 0,
-            })
-            .unwrap();
+            }) {
+                println!("Failed to write event, event: {:?}, error: {}", event, e)
+            }
+        }
     }
 
-    pub fn read_event(self) -> InputEvent {
+    pub fn read_event(self) -> Option<InputEvent> {
         // read event
-        let (_read_status, event) = self.device.next_event(ReadFlag::NORMAL).unwrap();
-        event
+        let (_read_status, event) = match self.device.next_event(ReadFlag::NORMAL) {
+            Ok((read_status, event)) => (read_status, event),
+            Err(e) => {
+                println!("Failed to read event, error: {}", e);
+                return None;
+            }
+        };
+        Some(event)
     }
 }
 
