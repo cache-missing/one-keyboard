@@ -1,11 +1,10 @@
-use std::fs::File;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use evdev_rs::enums::{EventCode, EV_SYN};
 use evdev_rs::Device;
-use evdev_rs::{DeviceWrapper, InputEvent, TimeVal, UInputDevice, UninitDevice};
+use evdev_rs::{InputEvent, TimeVal, UInputDevice, UninitDevice};
 
-use crate::utils::setup_uinit_device;
+use crate::utils::{open_a_valid_device, setup_uinit_device};
 
 enum ReadEventDevice {
     Device(Device),
@@ -20,7 +19,7 @@ pub struct VirtualKeyboard {
 impl VirtualKeyboard {
     // new
     pub fn new() -> Self {
-        let device = match find_device() {
+        let device = match open_a_valid_device() {
             Some(d) => ReadEventDevice::Device(d),
             None => {
                 // Create virtual device
@@ -98,34 +97,4 @@ impl Default for VirtualKeyboard {
     fn default() -> Self {
         Self::new()
     }
-}
-
-// scan all the input devices to find a real keyboard
-pub(crate) fn find_device() -> Option<Device> {
-    let device_path = "/dev/input/event10";
-    // Connect to real keyboard, or fallback to default virtual keyboard(TODO)
-    let f = match File::open(&device_path) {
-        Ok(f) => f,
-        Err(e) => {
-            println!("Failed to open device, error: {}", e);
-            return None;
-        }
-    };
-    let d = match Device::new_from_file(f) {
-        Ok(d) => d,
-        Err(e) => {
-            println!("Failed to create device, error: {}", e);
-            return None;
-        }
-    };
-
-    if let Some(n) = d.name() {
-        println!(
-            "Connected to device: '{}' ({:04x}:{:04x})",
-            n,
-            d.vendor_id(),
-            d.product_id()
-        );
-    }
-    Some(d)
 }
