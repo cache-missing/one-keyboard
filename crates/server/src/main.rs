@@ -1,3 +1,5 @@
+use flexi_logger::Logger;
+use log::{debug, error};
 use tokio::net::{TcpListener, TcpStream};
 use virtual_keyboard::VirtualKeyboard;
 use std::io;
@@ -16,14 +18,14 @@ async fn process_socket(socket: TcpStream, vb: &VirtualKeyboard)  {
         match socket.try_read(&mut buf) {
             Ok(0) => break,
             Ok(n) => {
-                println!("read {} bytes", n);
+                debug!("read {} bytes", n);
                 vb.write_event(buf);
             }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                 continue;
             }
             Err(e) => {
-                println!("error: {}", e);
+                error!("error: {}", e);
                 break;
             }
         }
@@ -32,6 +34,8 @@ async fn process_socket(socket: TcpStream, vb: &VirtualKeyboard)  {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    // start log
+    Logger::try_with_str("debug").map(|logger| logger.start()).unwrap().unwrap();
     let listener = TcpListener::bind("127.0.0.1:8080").await?;
 
     let vb = VirtualKeyboard::new();

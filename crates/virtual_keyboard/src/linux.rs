@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use evdev_rs::enums::{EventCode, EV_SYN};
 use evdev_rs::Device;
 use evdev_rs::{InputEvent, TimeVal, UInputDevice, UninitDevice};
+use log::{debug, error, info};
 
 use crate::utils::{open_a_valid_device, setup_uinit_device};
 
@@ -25,10 +26,14 @@ impl VirtualKeyboard {
                 // Create virtual device
                 let mut u = match UninitDevice::new() {
                     Some(u) => u,
-                    None => panic!("Failed to create virtual device"),
+                    None => {
+                        error!("Failed to create virtual device");
+                        panic!();
+                    }
                 };
                 if let Err(e) = setup_uinit_device(&mut u) {
-                    panic!("Failed to setup virtual device, error: {}", e)
+                    error!("Failed to setup virtual device, error: {}", e);
+                    panic!();
                 }
                 ReadEventDevice::UInitDevice(u)
             }
@@ -36,33 +41,39 @@ impl VirtualKeyboard {
         let v = match device {
             ReadEventDevice::Device(d) => match UInputDevice::create_from_device(&d) {
                 Ok(v) => v,
-                Err(e) => panic!("Failed to create virtual device, error: {}", e),
+                Err(e) => {
+                    error!("Failed to create virtual device, error: {}", e);
+                    panic!();
+                }
             },
             ReadEventDevice::UInitDevice(u) => match UInputDevice::create_from_device(&u) {
                 Ok(v) => v,
-                Err(e) => panic!("Failed to create virtual device, error: {}", e),
+                Err(e) => {
+                    error!("Failed to create virtual device, error: {}", e);
+                    panic!();
+                }
             },
         };
 
         if let Some(syspath) = v.syspath() {
-            println!("Created virtual device: {}", syspath);
+            debug!("Created virtual device: {}", syspath);
         }
 
         // devnode
         if let Some(devnode) = v.devnode() {
-            println!("devnode: {}", devnode);
+            debug!("devnode: {}", devnode);
         }
 
         VirtualKeyboard { input_device: v }
     }
 
     pub fn write_event(&self, event_buf: [u8; 4096]) {
-        println!("send event");
+        info!("send event");
         // deserialize event
         let event: InputEvent = match serde_json::from_slice(&event_buf) {
             Ok(event) => event,
             Err(e) => {
-                println!("Failed to deserialize event, error: {}", e);
+                error!("Failed to deserialize event, error: {}", e);
                 return;
             }
         };
@@ -76,7 +87,8 @@ impl VirtualKeyboard {
                 event_code: event.event_code,
                 value: event.value,
             }) {
-                return println!("Failed to write event, event: {:?}, error: {}", event, e);
+                error!("Failed to write event {:?}, error: {}", event, e);
+                return;
             }
 
             if let Err(e) = self.input_device.write_event(&InputEvent {
@@ -87,7 +99,7 @@ impl VirtualKeyboard {
                 event_code: EventCode::EV_SYN(EV_SYN::SYN_REPORT),
                 value: 0,
             }) {
-                println!("Failed to write event, event: {:?}, error: {}", event, e)
+                error!("Failed to write event, event: {:?}, error: {}", event, e)
             }
         }
     }
