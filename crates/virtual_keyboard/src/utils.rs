@@ -65,20 +65,8 @@ pub(crate) fn find_valid_device() -> Option<Device> {
             .is_some_and(|x| x.is_some_and(|y| *y))
         // check if the file name start with "event"
         {
-            let f = match File::open(&path) {
-                Ok(f) => f,
-                Err(e) => {
-                    println!("Failed to open device, error: {}", e);
-                    return None;
-                }
-            };
-            let d = match Device::new_from_file(f) {
-                Ok(d) => d,
-                Err(e) => {
-                    println!("Failed to create device, error: {}", e);
-                    return None;
-                }
-            };
+            let f = File::open(&path).ok()?;
+            let d = Device::new_from_file(f).ok()?;
             // check if the device is a real keyboard
             if is_keyboard(&d) {
                 return Some(d);
