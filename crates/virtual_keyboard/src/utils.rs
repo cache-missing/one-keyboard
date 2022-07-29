@@ -4,6 +4,7 @@ use evdev_rs::{
     enums::{BusType, EventCode, EventType, EV_KEY, EV_SYN},
     Device, DeviceWrapper, UninitDevice,
 };
+use log::{debug, error, info};
 
 pub(crate) fn setup_uinit_device(uinit_device: &mut UninitDevice) -> io::Result<()> {
     // Setup device
@@ -14,7 +15,7 @@ pub(crate) fn setup_uinit_device(uinit_device: &mut UninitDevice) -> io::Result<
 
     uinit_device.enable(EventType::EV_KEY)?;
     if let Err(e) = uinit_device.enable(EventCode::EV_KEY(EV_KEY::KEY_K)) {
-        println!("Failed to enable EV_KEY::KEY_K, error: {}", e);
+        error!("Failed to enable EV_KEY::KEY_K, error: {}", e);
     }
     uinit_device.enable(EventCode::EV_SYN(EV_SYN::SYN_REPORT))?;
 
@@ -23,12 +24,12 @@ pub(crate) fn setup_uinit_device(uinit_device: &mut UninitDevice) -> io::Result<
 
 // scan all the input devices to find a real keyboard
 pub(crate) fn open_a_valid_device() -> Option<Device> {
-    println!("opening a valid device...");
+    info!("opening a valid device...");
     let d = find_valid_device();
     match d {
         Some(d) => {
             if let Some(n) = d.name() {
-                println!(
+                info!(
                     "Connected to device: '{}' ({:04x}:{:04x})",
                     n,
                     d.vendor_id(),
@@ -42,19 +43,19 @@ pub(crate) fn open_a_valid_device() -> Option<Device> {
 }
 
 pub(crate) fn find_valid_device() -> Option<Device> {
-    println!("Scanning for keyboard devices...");
+    info!("Scanning for keyboard devices...");
     let devices_home = Path::new("/dev/input");
     for entry in match devices_home.read_dir() {
         Ok(e) => e,
         Err(e) => {
-            println!("Failed to read devices home directory: {}", e);
+            error!("Failed to read devices home directory: {}", e);
             return None;
         }
     } {
         let entry = match entry {
             Ok(e) => e,
             Err(e) => {
-                println!("Failed to read entry: {}", e);
+                error!("Failed to read entry: {}", e);
                 return None;
             }
         };
@@ -80,7 +81,7 @@ pub(crate) fn find_valid_device() -> Option<Device> {
 pub(crate) fn is_keyboard(device: &Device) -> bool {
     // when the device has EV_KEY and EV_REP, it is likly a real keyboard
     if device.has_event_type(&EventType::EV_KEY) && device.has_event_type(&EventType::EV_REP) {
-        println!("{:?} is a real keyboard", device.name());
+        debug!("{:?} is a real keyboard", device.name());
         return true;
     }
 
