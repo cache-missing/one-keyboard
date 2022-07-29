@@ -3,32 +3,26 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use evdev_rs::enums::{EventCode, EV_SYN};
 use evdev_rs::Device;
-use evdev_rs::{DeviceWrapper, InputEvent, ReadFlag, TimeVal, UInputDevice, UninitDevice};
+use evdev_rs::{DeviceWrapper, InputEvent, TimeVal, UInputDevice, UninitDevice};
 
 use crate::utils::setup_uinit_device;
+
+enum ReadEventDevice {
+    Device(Device),
+    UInitDevice(UninitDevice),
+}
 
 // Global virtual keyboard
 pub struct VirtualKeyboard {
     input_device: UInputDevice,
-    device: Option<Device>,
 }
 
 impl VirtualKeyboard {
     // new
     pub fn new() -> Self {
-        let d: Option<Device>;
-        let v = match find_device() {
-            Some(device) => {
-                // Attempt to create UInputDevice from UninitDevice
-                let v = match UInputDevice::create_from_device(&device) {
-                    Ok(v) => v,
-                    Err(e) => panic!("Failed to create virtual device, error: {}", e),
-                };
-                d = Some(device);
-                v
-            }
+        let device = match find_device() {
+            Some(d) => ReadEventDevice::Device(d),
             None => {
-                // create a device
                 // Create virtual device
                 let mut u = match UninitDevice::new() {
                     Some(u) => u,
@@ -37,13 +31,18 @@ impl VirtualKeyboard {
                 if let Err(e) = setup_uinit_device(&mut u) {
                     panic!("Failed to setup virtual device, error: {}", e)
                 }
-                let v = match UInputDevice::create_from_device(&u) {
-                    Ok(v) => v,
-                    Err(e) => panic!("Failed to create virtual device, error: {}", e),
-                };
-                d = None;
-                v
+                ReadEventDevice::UInitDevice(u)
             }
+        };
+        let v = match device {
+            ReadEventDevice::Device(d) => match UInputDevice::create_from_device(&d) {
+                Ok(v) => v,
+                Err(e) => panic!("Failed to create virtual device, error: {}", e),
+            },
+            ReadEventDevice::UInitDevice(u) => match UInputDevice::create_from_device(&u) {
+                Ok(v) => v,
+                Err(e) => panic!("Failed to create virtual device, error: {}", e),
+            },
         };
 
         if let Some(syspath) = v.syspath() {
@@ -55,10 +54,7 @@ impl VirtualKeyboard {
             println!("devnode: {}", devnode);
         }
 
-        VirtualKeyboard {
-            device: d,
-            input_device: v,
-        }
+        VirtualKeyboard { input_device: v }
     }
 
     pub fn write_event(&self, event_buf: [u8; 4096]) {
@@ -94,22 +90,6 @@ impl VirtualKeyboard {
             }) {
                 println!("Failed to write event, event: {:?}, error: {}", event, e)
             }
-        }
-    }
-
-    pub fn read_event(self) -> Option<InputEvent> {
-        if let Some(device) = self.device {
-            // read event
-            let (_read_status, event) = match device.next_event(ReadFlag::NORMAL) {
-                Ok((read_status, event)) => (read_status, event),
-                Err(e) => {
-                    println!("Failed to read event, error: {}", e);
-                    return None;
-                }
-            };
-            Some(event)
-        } else {
-            None
         }
     }
 }
