@@ -44,18 +44,31 @@ pub(crate) fn open_a_valid_device() -> Option<Device> {
 pub(crate) fn find_valid_device() -> Option<Device> {
     println!("Scanning for keyboard devices...");
     let devices_home = Path::new("/dev/input");
-    for entry in devices_home.read_dir().unwrap() {
-        let entry = entry.unwrap();
+    for entry in match devices_home.read_dir() {
+        Ok(e) => e,
+        Err(e) => {
+            println!("Failed to read devices home directory: {}", e);
+            return None;
+        }
+    } {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                println!("Failed to read entry: {}", e);
+                return None;
+            }
+        };
         let path = entry.path();
         // check if the file name start with "event"
-        if path
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .starts_with("event")
+        if match match path.file_name() {
+            Some(n) => n,
+            None => continue,
+        }
+        .to_str()
         {
-            // Connect to real keyboard, or fallback to default virtual keyboard(TODO)
+            Some(n) => n.starts_with("event"),
+            None => continue,
+        } {
             let f = match File::open(&path) {
                 Ok(f) => f,
                 Err(e) => {
@@ -83,7 +96,7 @@ pub(crate) fn find_valid_device() -> Option<Device> {
 pub(crate) fn is_keyboard(device: &Device) -> bool {
     // when the device has EV_KEY and EV_REP, it is likly a real keyboard
     if device.has_event_type(&EventType::EV_KEY) && device.has_event_type(&EventType::EV_REP) {
-        println!("{} is a real keyboard", device.name().unwrap());
+        println!("{:?} is a real keyboard", device.name());
         return true;
     }
 
