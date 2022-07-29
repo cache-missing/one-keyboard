@@ -1,68 +1,51 @@
 use std::fs::File;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use evdev_rs::enums::{BusType, EventCode, EventType, EV_KEY, EV_SYN};
+use evdev_rs::enums::{EventCode, EV_SYN};
 use evdev_rs::Device;
 use evdev_rs::{DeviceWrapper, InputEvent, ReadFlag, TimeVal, UInputDevice, UninitDevice};
 
+use crate::utils::setup_uinit_device;
+
 // Global virtual keyboard
 pub struct VirtualKeyboard {
-    device: Device,
     input_device: UInputDevice,
+    device: Option<Device>,
 }
 
 impl VirtualKeyboard {
     // new
     pub fn new() -> Self {
-        // scan all the input devices to find a real keyboard
-        let device = "/dev/input/event2";
-
-        // Connect to real keyboard, or fallback to default virtual keyboard(TODO)
-        let f = match File::open(device) {
-            Ok(f) => f,
-            Err(e) => panic!("Failed to open file {}, error: {}", device, e),
-        };
-        let d = match Device::new_from_file(f) {
-            Ok(d) => d,
-            Err(e) => panic!("Failed to open device {}, error: {}", device, e),
-        };
-
-        if let Some(n) = d.name() {
-            println!(
-                "Connected to device: '{}' ({:04x}:{:04x})",
-                n,
-                d.vendor_id(),
-                d.product_id()
-            );
-        }
-
-        // Create virtual device
-        let u = match UninitDevice::new() {
-            Some(u) => u,
-            None => panic!("Failed to create virtual device"),
-        };
-
-        // Setup device
-        u.set_name("Virtual Keyboard");
-        u.set_bustype(BusType::BUS_USB as u16);
-        u.set_vendor_id(0xabcd);
-        u.set_product_id(0xefef);
-
-        if let Err(e) = u.enable(EventType::EV_KEY) {
-            panic!("Failed to enable EV_KEY, error: {}", e)
-        };
-        if let Err(e) = u.enable(EventCode::EV_KEY(EV_KEY::KEY_K)) {
-            println!("Failed to enable EV_KEY(KEY_K), error: {}", e)
-        };
-        if let Err(e) = u.enable(EventCode::EV_SYN(EV_SYN::SYN_REPORT)) {
-            panic!("Failed to enable EV_SYN(SYN_REPORT), error: {}", e)
+        let d: Option<Device>;
+        let v = match find_device() {
+            Some(device) => {
+                // Attempt to create UInputDevice from UninitDevice
+                let v = match UInputDevice::create_from_device(&device) {
+                    Ok(v) => v,
+                    Err(e) => panic!("Failed to create virtual device, error: {}", e),
+                };
+                d = Some(device);
+                v
+            }
+            None => {
+                // create a device
+                // Create virtual device
+                let mut u = match UninitDevice::new() {
+                    Some(u) => u,
+                    None => panic!("Failed to create virtual device"),
+                };
+                if let Err(e) = setup_uinit_device(&mut u) {
+                    panic!("Failed to setup virtual device, error: {}", e)
+                }
+                let v = match UInputDevice::create_from_device(&u) {
+                    Ok(v) => v,
+                    Err(e) => panic!("Failed to create virtual device, error: {}", e),
+                };
+                d = None;
+                v
+            }
         };
 
-        // Attempt to create UInputDevice from UninitDevice
-        let v = match UInputDevice::create_from_device(&d) {
-            Ok(v) => v,
-            Err(e) => panic!("Failed to create virtual device, error: {}", e),
-        };
         if let Some(syspath) = v.syspath() {
             println!("Created virtual device: {}", syspath);
         }
@@ -115,15 +98,19 @@ impl VirtualKeyboard {
     }
 
     pub fn read_event(self) -> Option<InputEvent> {
-        // read event
-        let (_read_status, event) = match self.device.next_event(ReadFlag::NORMAL) {
-            Ok((read_status, event)) => (read_status, event),
-            Err(e) => {
-                println!("Failed to read event, error: {}", e);
-                return None;
-            }
-        };
-        Some(event)
+        if let Some(device) = self.device {
+            // read event
+            let (_read_status, event) = match device.next_event(ReadFlag::NORMAL) {
+                Ok((read_status, event)) => (read_status, event),
+                Err(e) => {
+                    println!("Failed to read event, error: {}", e);
+                    return None;
+                }
+            };
+            Some(event)
+        } else {
+            None
+        }
     }
 }
 
@@ -131,4 +118,28 @@ impl Default for VirtualKeyboard {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// scan all the input devices to find a real keyboard
+pub(crate) fn find_device() -> Option<Device> {
+    let device_path = "/dev/input/event2";
+    // Connect to real keyboard, or fallback to default virtual keyboard(TODO)
+    let f = match File::open(&device_path) {
+        Ok(f) => f,
+        Err(e) => panic!("Failed to open file {}, error: {}", device_path, e),
+    };
+    let d = match Device::new_from_file(f) {
+        Ok(d) => d,
+        Err(e) => panic!("Failed to open device {}, error: {}", device_path, e),
+    };
+
+    if let Some(n) = d.name() {
+        println!(
+            "Connected to device: '{}' ({:04x}:{:04x})",
+            n,
+            d.vendor_id(),
+            d.product_id()
+        );
+    }
+    Some(d)
 }
