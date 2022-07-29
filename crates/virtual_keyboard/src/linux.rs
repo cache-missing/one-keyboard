@@ -102,15 +102,21 @@ impl Default for VirtualKeyboard {
 
 // scan all the input devices to find a real keyboard
 pub(crate) fn find_device() -> Option<Device> {
-    let device_path = "/dev/input/event2";
+    let device_path = "/dev/input/event10";
     // Connect to real keyboard, or fallback to default virtual keyboard(TODO)
     let f = match File::open(&device_path) {
         Ok(f) => f,
-        Err(e) => panic!("Failed to open file {}, error: {}", device_path, e),
+        Err(e) => {
+            println!("Failed to open device, error: {}", e);
+            return None;
+        }
     };
     let d = match Device::new_from_file(f) {
         Ok(d) => d,
-        Err(e) => panic!("Failed to open device {}, error: {}", device_path, e),
+        Err(e) => {
+            println!("Failed to create device, error: {}", e);
+            return None;
+        }
     };
 
     if let Some(n) = d.name() {
