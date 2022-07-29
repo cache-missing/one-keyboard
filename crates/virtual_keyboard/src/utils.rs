@@ -59,16 +59,12 @@ pub(crate) fn find_valid_device() -> Option<Device> {
             }
         };
         let path = entry.path();
+        if path
+            .file_name()
+            .map(|name| name.to_str().map(|s| s.starts_with("event")))
+            .is_some_and(|x| x.is_some_and(|y| *y))
         // check if the file name start with "event"
-        if match match path.file_name() {
-            Some(n) => n,
-            None => continue,
-        }
-        .to_str()
         {
-            Some(n) => n.starts_with("event"),
-            None => continue,
-        } {
             let f = match File::open(&path) {
                 Ok(f) => f,
                 Err(e) => {
